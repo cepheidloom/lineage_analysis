@@ -9,35 +9,32 @@ import ollama
 # -------------------------------
 # Configuration
 # -------------------------------
-EXCEL_FILE = "object_lineage.xlsx"
-OUTPUT_FOLDER = "lineage_outputs_2"
-MODEL_NAME = "qwen2.5-coder:14b"
-MAX_CONCURRENT_REQUESTS = 2  # increase gradually if VRAM allows
+EXCEL_FILE = "object_definitions.csv"
+OUTPUT_FOLDER = "lineage_outputs"
+MODEL_NAME = "qwen2.5-coder:7b"
+MAX_CONCURRENT_REQUESTS = 1  # increase gradually if VRAM allows
 
 # -------------------------------
 # Setup
 # -------------------------------
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-df = pd.read_excel(EXCEL_FILE)
+df = pd.read_csv(EXCEL_FILE)
+df = df[df["ObjectType"] == "SQL_STORED_PROCEDURE"]
 
 def robust_clean_sql(sql_query):
-    # Standardize and handle hidden characters
-    sql_text = str(sql_query).replace("_x000D_", "\n").replace("_x000A_", "\n").replace("\r", "\n")
-    sql_text = sql_text.replace("\xa0", " ")
+    sql_text = str(sql_query)
 
-    # 1. Protect String Literals (Optional but safer)
-    # If the LLM needs to see the strings, don't use aggressive regex.
-    # Otherwise, simple regex is usually okay for lineage.
+    sql_text = sql_text.replace('\\n', '\n').replace('\\t', '\t')
 
-    # 2. Aggressive Comment Removal
+    # Remove single-line comments (-- ...)
     sql_text = re.sub(r'--.*', '', sql_text)
+    # Remove multi-line comments (/* ... */)
     sql_text = re.sub(r'/\*.*?\*/', '', sql_text, flags=re.DOTALL)
 
-    # 3. Normalize Whitespace (LLM-friendly)
     # Replace multiple newlines with a single newline
     sql_text = re.sub(r'\n\s*\n', '\n', sql_text)
-    # Collapse horizontal spaces
+    # Collapse horizontal spaces (tabs/spaces) into one space
     sql_text = re.sub(r'[ \t]+', ' ', sql_text)
     
     return sql_text.strip()
@@ -64,7 +61,7 @@ async def process_row(index, row):
             # -------------------------------
             # Safe filename
             # -------------------------------
-            filename_raw = f"{index}_{schema_name}_{object_name}"
+            filename_raw = f"{index}--{schema_name}--{object_name}"
             filename = (
                 re.sub(r"[^\w\s-]", "", filename_raw)
                 .strip()
@@ -92,7 +89,7 @@ async def process_row(index, row):
 # SQL:
 # {sql_text}
 # """
-prompt=f"""
+prompt= f"""
 You are a SQL data lineage extractor.
 
 TASK:
@@ -109,9 +106,12 @@ OBJECT IDENTIFICATION RULES:
   - schema.table
   - database.schema.table
   - [schema].[table]
+
 - DO NOT include SQL table hints:
   - IGNORE and REMOVE: NOLOCK, (NOLOCK), WITH (NOLOCK)
+
 - DO NOT treat SQL keywords or hints as schemas
+
 
 PAIRING RULES:
 - Each source MUST be paired with exactly one target
@@ -126,12 +126,15 @@ TEMP TABLE RULES:
 - If a temp table feeds a permanent table, map source → permanent table
 - Use temp tables ONLY if no permanent target exists
 
+
 STORED PROCEDURE RULES:
 - Do NOT treat stored procedure names as source tables
 - Extract underlying base tables used inside the procedure
 - Final lineage must represent table-to-table movement
 
+
 REQUIRED OUTPUT FORMAT:
+
 {{
   "lineage": [
     {{
@@ -153,10 +156,14 @@ output MUST be:
 
 SQL:
 {sql_text}
-"""
-,
-                format="json",
-            )
+""",
+format="json",
+# options={
+#         "num_ctx": 4096,  # Limits memory used by the "memory" of the prompt
+#         "num_gpu": 15,    # Forces ~15 layers onto 4GB RTX 3050
+#         "temperature": 0  # Best for data extraction (more deterministic)
+#     }
+)
 
             # -------------------------------
             # Parse JSON safely

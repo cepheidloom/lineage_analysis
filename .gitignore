@@ -1,9 +1,13 @@
 /view_dependency_jsons/
+/lineage_outputs/
+/.ipynb_checkpoints/
 target_object.yaml
 database_lineage_extracted_2.csv
 databases_lineage_extracted.csv
 object_definitions.csv
 object_definitions_2.csv
+object_definitions.xlsx
+object_definitions_2.xlsx
 view_dependencies_with_schema.json
 master_lineage_graph.json
 lineage_visualization.html
