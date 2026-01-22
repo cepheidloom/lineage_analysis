@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import os
 import re
+import hashlib
 from tqdm.asyncio import tqdm_asyncio
 import ollama
 
@@ -11,7 +12,7 @@ import ollama
 # -------------------------------
 EXCEL_FILE = "object_definitions.csv"
 OUTPUT_FOLDER = "lineage_outputs"
-MODEL_NAME = "qwen2.5-coder:7b"
+MODEL_NAME = "qwen2.5-coder:14b"
 MAX_CONCURRENT_REQUESTS = 1  # increase gradually if VRAM allows
 
 # -------------------------------
@@ -20,7 +21,8 @@ MAX_CONCURRENT_REQUESTS = 1  # increase gradually if VRAM allows
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 df = pd.read_csv(EXCEL_FILE)
-df = df[df["ObjectType"] == "SQL_STORED_PROCEDURE"]
+# df = df[df["ObjectType"] == "SQL_STORED_PROCEDURE"]
+df = df[(df["ObjectType"] == "SQL_STORED_PROCEDURE") & (df["Schema"] == "tmp")]
 
 def robust_clean_sql(sql_query):
     sql_text = str(sql_query)
@@ -39,6 +41,30 @@ def robust_clean_sql(sql_query):
     
     return sql_text.strip()
 
+def get_hash_for_object(schema_name, object_name):
+    """Generate a hash based on schema and object name."""
+    combined = f"{schema_name}::{object_name}"
+    return hashlib.md5(combined.encode()).hexdigest()
+
+def build_processed_hashes():
+    """Scan output folder and build a set of already processed hashes."""
+    processed = set()
+    if not os.path.exists(OUTPUT_FOLDER):
+        return processed
+    
+    for filename in os.listdir(OUTPUT_FOLDER):
+        if filename.endswith('.json'):
+            # Extract hash from filename pattern: {index}--{schema}--{object}.json
+            # We'll regenerate the hash from schema and object
+            parts = filename.replace('.json', '').split('--')
+            if len(parts) >= 3:
+                schema = parts[1]
+                object_name = parts[2]
+                file_hash = get_hash_for_object(schema, object_name)
+                processed.add(file_hash)
+    
+    return processed
+
 SEM = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 # Create ONE async client (important)
@@ -47,16 +73,21 @@ client = ollama.AsyncClient()
 # -------------------------------
 # Async per-row processor
 # -------------------------------
-async def process_row(index, row):
+async def process_row(index, row, processed_hashes):
+    schema_name = str(row["Schema"])
+    object_name = str(row["Object"])
+    
+    # Check if already processed
+    current_hash = get_hash_for_object(schema_name, object_name)
+    if current_hash in processed_hashes:
+        return  # Skip this row
+    
     async with SEM:
         try:
             # -------------------------------
             # Clean SQL text
             # -------------------------------
             sql_text = robust_clean_sql(row["definition"])
-
-            schema_name = str(row["Schema"])
-            object_name = str(row["Object"])
 
             # -------------------------------
             # Safe filename
@@ -75,94 +106,119 @@ async def process_row(index, row):
             # -------------------------------
             result = await client.generate(
                 model=MODEL_NAME,
-#                 prompt=f"""
-# You are a SQL lineage extractor.
-# Return ONLY valid JSON.
-# No explanations.
+prompt = f"""
+You are a SQL data lineage extractor specializing in T-SQL stored procedures.
 
-# JSON schema:
-# {{
-#   "source": [],
-#   "target": []
-# }}
+OBJECTIVE:
+Extract DIRECT source-to-target mappings between PERSISTENT database objects ONLY.
+Trace data flow through ALL intermediate steps (temp tables, CTEs, subqueries) but report only the FINAL persistent objects.
 
-# SQL:
-# {sql_text}
-# """
-prompt= f"""
-You are a SQL data lineage extractor.
+OBJECT CLASSIFICATION:
 
-TASK:
-Extract ALL source-to-target data object mappings from the SQL.
+PERSISTENT OBJECTS (Report these):
+- Tables: schema.table, [schema].[table], database.schema.table
+- Views: schema.view, [schema].[view]
+- Stored procedures (when used as data sources via EXEC INSERT)
 
-STRICT RULES (MANDATORY):
-- Output ONLY valid JSON
-- No explanations
-- No comments
-- No markdown
+INTERMEDIATE OBJECTS (Trace through, but DO NOT report):
+- Temp tables: #temp, ##global_temp
+- Table variables: @table
+- CTEs: WITH cte_name AS (...)
+- Subqueries and derived tables
+- Variables: @variable
 
-OBJECT IDENTIFICATION RULES:
-- A valid source or target must be a real data object:
-  - schema.table
-  - database.schema.table
-  - [schema].[table]
+EXTRACTION RULES:
 
-- DO NOT include SQL table hints:
-  - IGNORE and REMOVE: NOLOCK, (NOLOCK), WITH (NOLOCK)
+1. TRACE THROUGH INTERMEDIATES:
+   - If temp table #T is populated from table A, then #T is inserted into table B
+   - Report: A → B (not A → #T or #T → B)
 
-- DO NOT treat SQL keywords or hints as schemas
+2. HANDLE MULTI-STEP FLOWS:
+   - Step 1: A → #temp1
+   - Step 2: #temp1 → #temp2  
+   - Step 3: #temp2 → B
+   - Report: A → B
 
+3. MULTIPLE SOURCES TO ONE TARGET:
+   - Create separate lineage entries for each source
+   - Example: A → C, B → C (two separate JSON objects)
 
-PAIRING RULES:
-- Each source MUST be paired with exactly one target
-- DO NOT group sources
-- DO NOT group targets
-- One JSON object per source → target relationship
-- If multiple sources write to the same target, repeat the target
+4. ONE SOURCE TO MULTIPLE TARGETS:
+   - Create separate lineage entries for each target
+   - Example: A → X, A → Y (two separate JSON objects)
 
-TEMP TABLE RULES:
-- Temp tables (#table) are INTERMEDIATE objects
-- DO NOT use temp tables as final targets
-- If a temp table feeds a permanent table, map source → permanent table
-- Use temp tables ONLY if no permanent target exists
+5. COMPLEX QUERIES:
+   - Trace through all JOINs, subqueries, CTEs
+   - Extract base tables from nested SELECT statements
+   - Follow data flow through UNION, EXCEPT, INTERSECT operations
 
+6. IGNORE:
+   - Table hints: (NOLOCK), WITH (NOLOCK), (INDEX=...), etc.
+   - System tables/views unless explicitly part of business logic
+   - The stored procedure name itself as a source
 
-STORED PROCEDURE RULES:
-- Do NOT treat stored procedure names as source tables
-- Extract underlying base tables used inside the procedure
-- Final lineage must represent table-to-table movement
+7. DELETE/TRUNCATE OPERATIONS:
+   - These affect targets but have no sources
+   - Omit from lineage (or include with "source": null if you need to track modifications)
 
+8. EXEC STORED PROCEDURES:
+   - If "INSERT INTO table EXEC stored_proc", treat stored_proc as a source
+   - Otherwise, you may need to trace into that procedure separately
 
-REQUIRED OUTPUT FORMAT:
+OUTPUT FORMAT:
 
 {{
   "lineage": [
     {{
-      "source": "string",
-      "target": "string"
+      "source": "schema.table_name",
+      "target": "schema.table_name"
     }}
   ]
 }}
 
+RULES ENFORCEMENT:
+✓ Output ONLY valid JSON
+✓ No explanations, comments, or markdown
+✓ No temp tables (#temp) in final output
+✓ No CTEs or table variables in final output
+✓ Each lineage pair must have exactly one source and one target
+✓ Use fully qualified names when available (schema.table)
+✓ Remove all table hints from object names
+
 EXAMPLE:
-If SQL reads from A, B (WITH NOLOCK) and inserts into C,
-output MUST be:
+
+Given SQL:
+```sql
+-- Step 1: Read from A, B into temp
+SELECT * INTO #temp FROM A JOIN B ON A.id = B.id
+
+-- Step 2: Read from #temp and C into final table
+INSERT INTO Z 
+SELECT * FROM #temp JOIN C ON #temp.id = C.id
+
+Correct output:
 {{
   "lineage": [
-    {{ "source": "A", "target": "C" }},
-    {{ "source": "B", "target": "C" }}
+    {{"source": "A", "target": "Z"}},
+    {{"source": "B", "target": "Z"}},
+    {{"source": "C", "target": "Z"}}
   ]
 }}
 
-SQL:
+Incorrect output (DO NOT DO THIS):
+{{
+  "lineage": [
+    {{"source": "A", "target": "#temp"}},
+    {{"source": "B", "target": "#temp"}},
+    {{"source": "#temp", "target": "Z"}},
+    {{"source": "C", "target": "Z"}}
+  ]
+}}
+
+SQL TO ANALYZE:
 {sql_text}
 """,
 format="json",
-# options={
-#         "num_ctx": 4096,  # Limits memory used by the "memory" of the prompt
-#         "num_gpu": 15,    # Forces ~15 layers onto 4GB RTX 3050
-#         "temperature": 0  # Best for data extraction (more deterministic)
-#     }
 )
 
             # -------------------------------
@@ -186,8 +242,17 @@ format="json",
 # Orchestrator
 # -------------------------------
 async def main():
+    # Build set of already processed hashes
+    processed_hashes = build_processed_hashes()
+    total_rows = len(df)
+    skipped = len([1 for _, row in df.iterrows() 
+                   if get_hash_for_object(str(row["Schema"]), str(row["Object"])) in processed_hashes])
+    
+    print(f"Found {len(processed_hashes)} already processed files")
+    print(f"Will process {total_rows - skipped} out of {total_rows} rows")
+    
     tasks = [
-        process_row(index, row)
+        process_row(index, row, processed_hashes)
         for index, row in df.iterrows()
     ]
 
