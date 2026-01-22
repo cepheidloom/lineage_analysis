@@ -11,3 +11,4 @@ object_definitions_2.xlsx
 view_dependencies_with_schema.json
 master_lineage_graph.json
 lineage_visualization.html
+UAT_object_definitions.csv
