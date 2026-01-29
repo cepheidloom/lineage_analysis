@@ -20,9 +20,13 @@ MAX_CONCURRENT_REQUESTS = 1  # increase gradually if VRAM allows
 # -------------------------------
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-df = pd.read_csv(EXCEL_FILE)
-# df = df[df["ObjectType"] == "SQL_STORED_PROCEDURE"]
-df = df[(df["ObjectType"] == "SQL_STORED_PROCEDURE") & (df["Schema"] == "tmp")]
+df_definitions = pd.concat([pd.read_csv("object_definitions.csv"), pd.read_csv("UAT_object_definitions.csv")], ignore_index=True)
+
+df_definitions = df_definitions.query("ObjectType == 'SQL_STORED_PROCEDURE'")
+# # 1. Sort so that preferred database comes first
+df_definitions = df_definitions.sort_values(by="DatabaseName", ascending=False)
+df = df_definitions.drop_duplicates(subset=['Schema', 'Object'], keep='first')
+
 
 def robust_clean_sql(sql_query):
     sql_text = str(sql_query)
