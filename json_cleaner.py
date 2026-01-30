@@ -2,7 +2,7 @@ import os
 import json
 
 # Define the folder path relative to the current working directory
-folder_path = "view_dependency_jsons"
+folder_path = "../lineage_outputs/"
 
 # Check if folder exists to avoid errors
 if os.path.exists(folder_path):
