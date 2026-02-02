@@ -1,6 +1,8 @@
 /view_dependency_jsons/
 /lineage_outputs/
 /.ipynb_checkpoints/
+/__pycache__/
+/sql_scripts_py_generated
 target_object.yaml
 database_lineage_extracted_2.csv
 databases_lineage_extracted.csv
