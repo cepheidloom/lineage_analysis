@@ -3,6 +3,5 @@
 /local_files/
 /.ipynb_checkpoints/
 /__pycache__/
-view_dependencies_with_schema.json
 master_lineage_graph.json
 lineage_visualization.html
