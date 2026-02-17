@@ -3,5 +3,6 @@
 /local_files/
 /.ipynb_checkpoints/
 /__pycache__/
+/lib/
 master_lineage_graph.json
 lineage_visualization.html

@@ -64,6 +64,8 @@ for idx, (target_full, group) in enumerate(df.groupby('Target_Full'), 1):
     
     # Wrap dependencies in a "lineage" key
     output_data = {
+        "name": f"{schema_name}.{object_name}",
+        "type": "VIEW",
         "lineage": dependencies
     }
     
