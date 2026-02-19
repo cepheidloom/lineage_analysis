@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Lineage Statistics Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:        #0b0f1a;
+    --surface:   #111827;
+    --surface2:  #1a2235;
+    --border:    #1f2d45;
+    --accent:    #00c2ff;
+    --accent2:   #7b61ff;
+    --accent3:   #00e5a0;
+    --warn:      #ffb347;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --danger:    #ff6b6b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    padding: 0 0 60px 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: linear-gradient(135deg, #0b0f1a 0%, #111827 50%, #0f1e38 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 36px 48px 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -80px; right: -80px;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(0,194,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; left: 20%;
+    width: 240px; height: 240px;
+    background: radial-gradient(circle, rgba(123,97,255,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    opacity: 0.8;
+  }
+  header h1 {
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(90deg, #e2e8f0 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 6px;
+  }
+  .header-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .header-meta span { color: var(--accent3); }
+
+  /* ── LAYOUT ── */
+  .main { padding: 40px 48px; max-width: 1400px; margin: 0 auto; }
+  .section-title {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── SUMMARY CARDS ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--card-accent, var(--accent));
+  }
+  .card-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .card-value {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: var(--card-accent, var(--accent));
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .card-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── TABLES ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 48px;
+  }
+  .table-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface2);
+  }
+  .table-header-title {
+    font-weight: 700;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .table-header-title .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--th-color, var(--accent));
+  }
+  .table-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--border);
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 24px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td {
+    padding: 13px 24px;
+    font-size: 13px;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+  .badge-sp    { background: rgba(255,179,71,0.15);  color: var(--warn);   border: 1px solid rgba(255,179,71,0.3); }
+  .badge-table { background: rgba(0,194,255,0.1);    color: var(--accent); border: 1px solid rgba(0,194,255,0.25); }
+
+  /* ── BAR CHART ── */
+  .bar-wrap { padding: 6px 24px 16px; }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .bar-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text);
+    width: 260px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+  .bar-track {
+    flex: 1;
+    height: 22px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--bar-color, var(--accent)), var(--bar-color2, var(--accent2)));
+    transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+  }
+  .bar-fill-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.9);
+    font-weight: 600;
+  }
+
+  /* ── SCHEMA GRID ── */
+  .schema-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    padding: 20px 24px 24px;
+  }
+  .schema-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    transition: border-color 0.2s;
+  }
+  .schema-card:hover { border-color: var(--accent2); }
+  .schema-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent2);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .schema-name .total-badge {
+    font-size: 10px;
+    background: rgba(123,97,255,0.15);
+    color: var(--accent2);
+    border: 1px solid rgba(123,97,255,0.3);
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+  .schema-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .schema-stat { text-align: center; }
+  .schema-stat-val { font-size: 1.4rem; font-weight: 800; }
+  .schema-stat-lbl { font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .schema-bar-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .schema-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  /* ── CRITICAL PATH ── */
+  .path-wrap {
+    padding: 24px;
+    overflow-x: auto;
+  }
+  .path-chain {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+  .path-node {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text);
+    white-space: nowrap;
+    transition: border-color 0.2s, background 0.2s;
+    cursor: default;
+  }
+  .path-node:hover { border-color: var(--accent3); background: rgba(0,229,160,0.05); }
+  .path-node.sp-node { border-color: rgba(255,179,71,0.4); color: var(--warn); }
+  .path-arrow {
+    color: var(--muted);
+    font-size: 16px;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+  .path-depth {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 24px 16px;
+  }
+
+  /* ── TWO COL ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 48px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── SCROLL ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">// Data Lineage Intelligence</div>
+  <h1>Lineage Statistics</h1>
+  <div class="header-meta" id="header-meta">Loading...</div>
+</header>
+
+<div class="main">
+
+  <!-- SUMMARY CARDS -->
+  <div class="section-title">Overview</div>
+  <div class="cards-grid" id="summary-cards"></div>
+
+  <!-- SCHEMA BREAKDOWN -->
+  <div class="section-title">Schema Breakdown</div>
+  <div class="table-wrap" style="margin-bottom:48px;">
+    <div class="table-header">
+      <div class="table-header-title">
+        <div class="dot" style="background:var(--accent2)"></div>
+        All Detected Schemas
+      </div>
+      <div class="table-count" id="schema-count"></div>
+    </div>
+    <div class="schema-grid" id="schema-grid"></div>
+  </div>
+
+  <!-- MOST CONNECTED (two col) -->
+  <div class="section-title">Connectivity Analysis</div>
+  <div class="two-col">
+    <div class="table-wrap" style="margin-bottom:0">
+      <div class="table-header">
+        <div class="table-header-title">
+          <div class="dot" style="background:var(--accent)"></div>
+          Most Depended Upon
+        </div>
+        <div class="table-count">Top 10</div>
+      </div>
+      <div class="bar-wrap" id="incoming-bars"></div>
+    </div>
+    <div class="table-wrap" style="margin-bottom:0">
+      <div class="table-header">
+        <div class="table-header-title">
+          <div class="dot" style="background:var(--danger)"></div>
+          Most Impactful
+        </div>
+        <div class="table-count">Top 10</div>
+      </div>
+      <div class="bar-wrap" id="outgoing-bars"></div>
+    </div>
+  </div>
+  <div style="margin-bottom:48px"></div>
+
+  <!-- SP IMPACT -->
+  <div class="section-title">Stored Procedure Impact</div>
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-header-title">
+        <div class="dot" style="background:var(--warn)"></div>
+        Top Stored Procedures by Total Connections
+      </div>
+      <div class="table-count" id="sp-count"></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Stored Procedure</th>
+          <th>Incoming</th>
+          <th>Outgoing</th>
+          <th>Total</th>
+          <th>Distribution</th>
+        </tr>
+      </thead>
+      <tbody id="sp-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- BASE & TERMINAL TABLES (two col) -->
+  <div class="section-title">Source & Sink Tables</div>
+  <div class="two-col">
+    <div class="table-wrap" style="margin-bottom:0">
+      <div class="table-header">
+        <div class="table-header-title">
+          <div class="dot" style="background:var(--accent3)"></div>
+          Base Tables
+        </div>
+        <div class="table-count" id="base-count"></div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Table Name</th></tr></thead>
+        <tbody id="base-tbody"></tbody>
+      </table>
+    </div>
+    <div class="table-wrap" style="margin-bottom:0">
+      <div class="table-header">
+        <div class="table-header-title">
+          <div class="dot" style="background:var(--danger)"></div>
+          Terminal Tables
+        </div>
+        <div class="table-count" id="terminal-count"></div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Table Name</th></tr></thead>
+        <tbody id="terminal-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div style="margin-bottom:48px"></div>
+
+  <!-- CRITICAL PATH -->
+  <div class="section-title">Critical Path — Longest Lineage Chain</div>
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-header-title">
+        <div class="dot" style="background:var(--accent3)"></div>
+        End-to-End Lineage Chain
+      </div>
+      <div class="table-count" id="path-depth-badge"></div>
+    </div>
+    <div class="path-depth" id="path-depth-label"></div>
+    <div class="path-wrap">
+      <div class="path-chain" id="path-chain"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── INJECT DATA ──
+const DATA = __STATS_DATA__;
+
+// ── HELPERS ──
+const $ = id => document.getElementById(id);
+const fmt = n => n?.toLocaleString() ?? 'N/A';
+
+function isStoredProcedure(name, data) {
+  for (const schema of Object.values(data.schema_breakdown)) {
+    if (schema.stored_procedures.includes(name)) return true;
+  }
+  return false;
+}
+
+// ── SUMMARY CARDS ──
+const s = DATA.summary;
+const cardDefs = [
+  { label: 'Total Nodes',           value: s.total_nodes,             sub: 'in subgraph',          accent: 'var(--accent)'  },
+  { label: 'Total Edges',           value: s.total_edges,             sub: 'relationships',         accent: 'var(--accent2)' },
+  { label: 'Schemas Detected',      value: s.total_schemas,           sub: 'auto-detected',         accent: 'var(--accent3)' },
+  { label: 'Base Tables',           value: s.total_base_tables,       sub: 'root sources',          accent: 'var(--accent3)' },
+  { label: 'Terminal Tables',       value: s.total_terminal_tables,   sub: 'final destinations',    accent: 'var(--danger)'  },
+  { label: 'Stored Procedures',     value: s.total_stored_procedures, sub: 'in subgraph',           accent: 'var(--warn)'    },
+  { label: 'Longest Chain',         value: s.longest_lineage_chain,   sub: 'nodes deep',            accent: 'var(--accent)'  },
+];
+const cardsGrid = $('summary-cards');
+cardDefs.forEach(c => {
+  cardsGrid.innerHTML += `
+    <div class="card" style="--card-accent:${c.accent}">
+      <div class="card-label">${c.label}</div>
+      <div class="card-value">${fmt(c.value)}</div>
+      <div class="card-sub">${c.sub}</div>
+    </div>`;
+});
+
+// ── SCHEMA BREAKDOWN ──
+const schemas = DATA.schema_breakdown;
+const schemaNames = Object.keys(schemas);
+const maxTotal = Math.max(...schemaNames.map(k => schemas[k].total));
+$('schema-count').textContent = `${schemaNames.length} schemas`;
+const schemaGrid = $('schema-grid');
+schemaNames.forEach(name => {
+  const d = schemas[name];
+  const pct = Math.round((d.total / maxTotal) * 100);
+  schemaGrid.innerHTML += `
+    <div class="schema-card">
+      <div class="schema-name">
+        ${name}
+        <span class="total-badge">${d.total} objects</span>
+      </div>
+      <div class="schema-stats">
+        <div class="schema-stat">
+          <div class="schema-stat-val" style="color:var(--accent)">${d.table_count}</div>
+          <div class="schema-stat-lbl">Tables</div>
+        </div>
+        <div class="schema-stat">
+          <div class="schema-stat-val" style="color:var(--warn)">${d.stored_procedure_count}</div>
+          <div class="schema-stat-lbl">Procs</div>
+        </div>
+      </div>
+      <div class="schema-bar-track">
+        <div class="schema-bar-fill" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+});
+
+// ── CONNECTIVITY BARS ──
+function renderBars(containerId, items, valueKey, color1, color2) {
+  const container = $(containerId);
+  const maxVal = Math.max(...items.map(i => i[valueKey]));
+  items.forEach(item => {
+    const pct = maxVal > 0 ? Math.round((item[valueKey] / maxVal) * 100) : 0;
+    container.innerHTML += `
+      <div class="bar-row">
+        <div class="bar-label" title="${item.node}">${item.node}</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${pct}%; --bar-color:${color1}; --bar-color2:${color2}">
+            <span class="bar-fill-val">${item[valueKey]}</span>
+          </div>
+        </div>
+      </div>`;
+  });
+}
+const connected = DATA.most_connected_nodes;
+renderBars('incoming-bars', connected['most_depended_upon (highest incoming)'], 'incoming_edges', 'var(--accent)', 'var(--accent2)');
+renderBars('outgoing-bars', connected['most_impactful (highest outgoing)'],     'outgoing_edges', 'var(--danger)', 'var(--warn)');
+
+// ── SP IMPACT TABLE ──
+const spData = DATA.sp_impact_analysis;
+$('sp-count').textContent = `${spData.length} procedures`;
+const spTbody = $('sp-tbody');
+spData.forEach((sp, i) => {
+  const total = sp.total_connections;
+  const inPct = total > 0 ? Math.round((sp.incoming_edges / total) * 100) : 0;
+  spTbody.innerHTML += `
+    <tr>
+      <td class="mono" style="color:var(--muted)">${String(i+1).padStart(2,'0')}</td>
+      <td class="mono" style="color:var(--warn)">${sp.stored_procedure}</td>
+      <td class="mono" style="color:var(--accent)">${sp.incoming_edges}</td>
+      <td class="mono" style="color:var(--danger)">${sp.outgoing_edges}</td>
+      <td class="mono" style="color:var(--text); font-weight:700">${total}</td>
+      <td style="min-width:140px">
+        <div style="height:8px; background:var(--border); border-radius:4px; overflow:hidden; display:flex;">
+          <div style="width:${inPct}%; background:var(--accent); border-radius:4px 0 0 4px;"></div>
+          <div style="flex:1; background:var(--danger); border-radius:0 4px 4px 0;"></div>
+        </div>
+      </td>
+    </tr>`;
+});
+
+// ── BASE & TERMINAL TABLES ──
+function renderSimpleTable(tbodyId, countId, items) {
+  $(countId).textContent = `${items.length} tables`;
+  const tbody = $(tbodyId);
+  items.forEach((name, i) => {
+    tbody.innerHTML += `
+      <tr>
+        <td class="mono" style="color:var(--muted); width:40px">${i+1}</td>
+        <td class="mono">${name}</td>
+      </tr>`;
+  });
+}
+renderSimpleTable('base-tbody',     'base-count',     DATA.base_tables);
+renderSimpleTable('terminal-tbody', 'terminal-count', DATA.terminal_tables);
+
+// ── CRITICAL PATH ──
+const path     = DATA.lineage_depth.critical_path;
+const pathLen  = DATA.lineage_depth.longest_chain_length;
+$('path-depth-badge').textContent = `${pathLen} nodes`;
+$('path-depth-label').textContent = `Depth: ${pathLen} hops from source to sink`;
+const chain = $('path-chain');
+path.forEach((node, i) => {
+  const isSp = isStoredProcedure(node, DATA);
+  chain.innerHTML += `<div class="path-node ${isSp ? 'sp-node' : ''}" title="${node}">${node}</div>`;
+  if (i < path.length - 1) {
+    chain.innerHTML += `<div class="path-arrow">→</div>`;
+  }
+});
+
+// ── HEADER META ──
+$('header-meta').innerHTML =
+  `Nodes: <span>${fmt(s.total_nodes)}</span> &nbsp;·&nbsp; ` +
+  `Edges: <span>${fmt(s.total_edges)}</span> &nbsp;·&nbsp; ` +
+  `Schemas: <span>${fmt(s.total_schemas)}</span>`;
+</script>
+</body>
+</html>

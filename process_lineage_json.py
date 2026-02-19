@@ -1,5 +1,6 @@
 import json
 import yaml
+from collections import defaultdict, Counter
 import glob
 import os
 import networkx as nx
@@ -7,77 +8,117 @@ from networkx.drawing.nx_agraph import to_agraph
 
 os.environ["PATH"] += os.pathsep + r"C:\\Graphviz-14.1.2-win64\\bin"
 
+from collections import Counter
+
 def build_lineage_graph(folder_path: str) -> nx.DiGraph:
     """
     Reads all lineage JSON files in a folder and builds a directed graph.
     Handles VIEWs and SQL_STORED_PROCEDUREs differently.
+    Normalizes node names to lowercase internally, but stores the most
+    frequently seen casing as the display label.
     """
-    # Initialize a Directed Graph
     G = nx.DiGraph()
-    
-    # Find all json files in the target directory
+
     json_files = glob.glob(os.path.join(folder_path, "*.json"))
     print(f"Found {len(json_files)} lineage files.")
+
+    # -------------------------------------------------------
+    # PASS 1: Count casing occurrences for every node name
+    # -------------------------------------------------------
+    casing_votes = defaultdict(Counter)  # { lowercase_name: Counter({casing: count}) }
 
     for file_path in json_files:
         try:
             with open(file_path, 'r') as f:
                 data = json.load(f)
-                
-                # Extract type and name
-                obj_type = data.get('type', '')
-                obj_name = data.get('name', '')
-                
-                # Extract lineage relationships
-                relationships = data.get('lineage', [])
-                
-                if obj_type == 'VIEW':
-                    # Simple pass-through: just add source -> target edges
-                    for item in relationships:
-                        src = item.get('source')
-                        tgt = item.get('target')
-                        
-                        if src and tgt:
-                            G.add_edge(src, tgt)
-                            # Mark nodes as tables/views (default)
-                            if src not in G.nodes:
-                                G.add_node(src, node_type='table')
-                            if tgt not in G.nodes:
-                                G.add_node(tgt, node_type='table')
-                
-                elif obj_type == 'SQL_STORED_PROCEDURE':
-                    # Add the stored procedure as a node
-                    if obj_name:
-                        G.add_node(obj_name, node_type='stored_procedure')
-                    
-                    # Handle special keywords and relationships
-                    for item in relationships:
-                        src = item.get('source')
-                        tgt = item.get('target')
-                        
-                        if src == 'CHANGING' and tgt:
-                            # StoredProcedure -> Target
-                            G.add_edge(obj_name, tgt)
-                            if tgt not in G.nodes:
-                                G.add_node(tgt, node_type='table')
-                        
-                        elif tgt == 'REFERENCED' and src:
-                            # Source -> StoredProcedure
-                            G.add_edge(src, obj_name)
-                            if src not in G.nodes:
-                                G.add_node(src, node_type='table')
-                        
-                        elif src and tgt:
-                            # Standard case: Source -> SP -> Target
-                            G.add_edge(src, obj_name)
-                            G.add_edge(obj_name, tgt)
-                            if src not in G.nodes:
-                                G.add_node(src, node_type='table')
-                            if tgt not in G.nodes:
-                                G.add_node(tgt, node_type='table')
-                        
+
+            obj_type = data.get('type', '')
+            obj_name = data.get('name', '')
+
+            # "name" field counts as a vote
+            if obj_name:
+                casing_votes[obj_name.lower()][obj_name] += 1
+
+            for item in data.get('lineage', []):
+                src = item.get('source')
+                tgt = item.get('target')
+                # Skip special keywords
+                if src and src not in ('CHANGING',):
+                    casing_votes[src.lower()][src] += 1
+                if tgt and tgt not in ('REFERENCED',):
+                    casing_votes[tgt.lower()][tgt] += 1
+
         except Exception as e:
-            print(f"Error processing {file_path}: {e}")
+            print(f"Error in pass 1 for {file_path}: {e}")
+
+    # Resolve canonical display name (most frequent casing wins, random on tie)
+    canonical = {
+        lower: counter.most_common(1)[0][0]
+        for lower, counter in casing_votes.items()
+    }
+
+    # -------------------------------------------------------
+    # Helper: normalize a raw name to its lowercase key,
+    # then return the canonical display name
+    # -------------------------------------------------------
+    def resolve(name: str) -> str:
+        return canonical.get(name.lower(), name)
+
+    # -------------------------------------------------------
+    # PASS 2: Build the graph using canonical names
+    # -------------------------------------------------------
+    for file_path in json_files:
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+
+            obj_type = data.get('type', '')
+            obj_name = resolve(data.get('name', '')) if data.get('name') else ''
+            relationships = data.get('lineage', [])
+
+            if obj_type == 'VIEW':
+                for item in relationships:
+                    src = item.get('source')
+                    tgt = item.get('target')
+                    if src and tgt:
+                        src_c, tgt_c = resolve(src), resolve(tgt)
+                        G.add_edge(src_c, tgt_c)
+                        if src_c not in G.nodes:
+                            G.add_node(src_c, node_type='table')
+                        if tgt_c not in G.nodes:
+                            G.add_node(tgt_c, node_type='table')
+
+            elif obj_type == 'SQL_STORED_PROCEDURE':
+                if obj_name:
+                    G.add_node(obj_name, node_type='stored_procedure')
+
+                for item in relationships:
+                    src = item.get('source')
+                    tgt = item.get('target')
+
+                    if src == 'CHANGING' and tgt:
+                        tgt_c = resolve(tgt)
+                        G.add_edge(obj_name, tgt_c)
+                        if tgt_c not in G.nodes:
+                            G.add_node(tgt_c, node_type='table')
+
+                    elif tgt == 'REFERENCED' and src:
+                        src_c = resolve(src)
+                        G.add_edge(src_c, obj_name)
+                        if src_c not in G.nodes:
+                            G.add_node(src_c, node_type='table')
+
+                    elif src and tgt:
+                        src_c, tgt_c = resolve(src), resolve(tgt)
+                        G.add_edge(src_c, obj_name)
+                        G.add_edge(obj_name, tgt_c)
+                        if src_c not in G.nodes:
+                            G.add_node(src_c, node_type='table')
+                        if tgt_c not in G.nodes:
+                            G.add_node(tgt_c, node_type='table')
+
+        except Exception as e:
+            print(f"Error in pass 2 for {file_path}: {e}")
 
     print(f"Graph built successfully with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
     return G
@@ -164,7 +205,7 @@ def visualize_lineage_graphviz(G: nx.DiGraph, target_tables: list, output_file: 
     A.graph_attr.update({
         'rankdir': 'LR',  # Left to Right layout
         'bgcolor': 'white',
-        'splines': 'ortho',  # Orthogonal edges (clean right angles)
+        'splines': 'ortho',  # Orthogonal edges (clean right angles) can be changed to 'polyline'
         'nodesep': '0.8',
         'ranksep': '1.5',
         'fontname': 'Arial',
