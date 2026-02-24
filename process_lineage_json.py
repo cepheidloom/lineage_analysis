@@ -6,7 +6,11 @@ import os
 import networkx as nx
 from networkx.drawing.nx_agraph import to_agraph
 
-os.environ["PATH"] += os.pathsep + r"C:\\Graphviz-14.1.2-win64\\bin"
+
+with open(r'local_files\target_object.yaml', 'r') as file:
+    graph_viz_path = yaml.safe_load(file)
+
+os.environ["PATH"] += os.pathsep + graph_viz_path["graphviz_path"]
 
 from collections import Counter
 
@@ -112,6 +116,25 @@ def build_lineage_graph(folder_path: str) -> nx.DiGraph:
                         src_c, tgt_c = resolve(src), resolve(tgt)
                         G.add_edge(src_c, obj_name)
                         G.add_edge(obj_name, tgt_c)
+                        if src_c not in G.nodes:
+                            G.add_node(src_c, node_type='table')
+                        if tgt_c not in G.nodes:
+                            G.add_node(tgt_c, node_type='table')
+            
+            elif obj_type == 'POWER_BI_TABLE':
+                # Power BI tables: simple pass-through like VIEWs
+                # Add the PBI table itself as a node
+                if obj_name:
+                    G.add_node(obj_name, node_type='powerbi_table')
+                
+                for item in relationships:
+                    src = item.get('source')
+                    tgt = item.get('target')
+                    
+                    # Skip if source is empty (calculated tables)
+                    if src and tgt:
+                        src_c, tgt_c = resolve(src), resolve(tgt)
+                        G.add_edge(src_c, tgt_c)
                         if src_c not in G.nodes:
                             G.add_node(src_c, node_type='table')
                         if tgt_c not in G.nodes:
@@ -252,6 +275,16 @@ def visualize_lineage_graphviz(G: nx.DiGraph, target_tables: list, output_file: 
                 'penwidth': '2',
                 'style': 'filled'
             })
+        elif node_type == 'powerbi_table':
+            # Power BI tables: Rounded box with purple/violet
+            n.attr.update({
+                'shape': 'box',
+                'fillcolor': '#e6d5ff',
+                'color': '#9966ff',
+                'penwidth': '2',
+                'style': 'filled,rounded',
+                'peripheries': '1'
+            })
         else:
             # Regular tables: Box with light blue
             n.attr.update({
@@ -286,7 +319,7 @@ if __name__ == "__main__":
     TARGET_TABLES = yaml_read["target_tables"]["target_tables_list"]
     
     # Direction: 'upstream', 'downstream', or 'both'
-    DIRECTION = "upstream"
+    DIRECTION = "downstream"
     
     # Output file (supports .png, .svg, .pdf)
     OUTPUT_FILE = "local_files/lineage_output.svg"

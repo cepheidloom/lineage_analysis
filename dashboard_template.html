@@ -360,6 +360,10 @@
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--surface); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Updates for power BI ── */
+  .path-node.sp-node { border-color: rgba(255,179,71,0.4); color: var(--warn); }
+  .path-node.pbi-node { border-color: rgba(153,102,255,0.4); color: #9966ff; }
 </style>
 </head>
 <body>
@@ -505,6 +509,10 @@ function isStoredProcedure(name, data) {
   return false;
 }
 
+function isPowerBITable(name, data) {
+  return name.startsWith('pbi.');
+}
+
 // ── SUMMARY CARDS ──
 const s = DATA.summary;
 const cardDefs = [
@@ -624,7 +632,11 @@ $('path-depth-label').textContent = `Depth: ${pathLen} hops from source to sink`
 const chain = $('path-chain');
 path.forEach((node, i) => {
   const isSp = isStoredProcedure(node, DATA);
-  chain.innerHTML += `<div class="path-node ${isSp ? 'sp-node' : ''}" title="${node}">${node}</div>`;
+  const isPbi = isPowerBITable(node, DATA);
+  let nodeClass = 'path-node';
+  if (isSp) nodeClass += ' sp-node';
+  if (isPbi) nodeClass += ' pbi-node';
+  chain.innerHTML += `<div class="${nodeClass}" title="${node}">${node}</div>`;
   if (i < path.length - 1) {
     chain.innerHTML += `<div class="path-arrow">→</div>`;
   }
