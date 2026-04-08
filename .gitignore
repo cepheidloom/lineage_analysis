@@ -1,8 +1,2 @@
-/lineage_outputs/
-/sql_scripts_py_generated
-/local_files/
-/.ipynb_checkpoints/
+_DATA_AND_OUTPUTS
 /__pycache__/
-/lib/
-master_lineage_graph.json
-lineage_visualization.html

@@ -7,7 +7,6 @@ import os
 import re
 
 # custom .py files
-import json_cleaner
 import utils
 
 # -------------------------------
@@ -132,4 +131,4 @@ if __name__ == "__main__":
 
     print("\n" + "-" * 30)
     print(f"Batch processing complete. Files saved to: {OUTPUT_FOLDER}")
-    json_cleaner.clean_json()
+    utils.clean_json()
