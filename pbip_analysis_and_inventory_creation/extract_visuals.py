@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Set, Tuple
 from collections import defaultdict
 import yaml
+import re
 
 # ==========================================
 # HELPER FUNCTIONS
@@ -404,7 +405,7 @@ def extract_visual_info(page_folder: Path, page_name: str, page_display_name: st
     return visuals
 
 
-def extract_all_visuals(FINAL_OUTPUT_FOLDER, REPORT_FOLDER):
+def extract_all_visuals(FINAL_OUTPUT_FOLDER, PAGE_FOLDER):
     """
     Main function to extract all visuals from all pages.
     """
@@ -419,7 +420,7 @@ def extract_all_visuals(FINAL_OUTPUT_FOLDER, REPORT_FOLDER):
     print(f"{'='*70}\n")
     
     # Iterate through page folders
-    for page_folder in REPORT_FOLDER.iterdir():
+    for page_folder in PAGE_FOLDER.iterdir():
         if not page_folder.is_dir():
             continue
         
@@ -459,8 +460,11 @@ def extract_all_visuals(FINAL_OUTPUT_FOLDER, REPORT_FOLDER):
     # Save individual JSON files
     for visual in all_visuals:
         # Clean filename
-        filename = visual["name"].replace(" || ", "_").replace(" ", "_").replace("/", "_")
-        filename = f"{filename}.json"
+        raw_title = visual["visual_title"]
+        clean_title = raw_title.replace(" ", "_")
+        clean_title = re.sub(r'[<>:"/\\|?*]', '_', clean_title)
+        clean_title = clean_title[:60].strip('_')
+        filename = f"{clean_title}__{visual["visual_id"]}.json"  # Use visual ID to ensure uniqueness
 
         safe_page_name = visual["page_display_name"].replace(" ", "_").replace("/", "_")
         (FINAL_OUTPUT_FOLDER / safe_page_name).mkdir(parents=True, exist_ok=True)
@@ -489,10 +493,11 @@ if __name__ == "__main__":
     with open("_DATA_AND_OUTPUTS/local_files/target_object.yaml", "r") as f:
             pbi_variables = yaml.safe_load(f)
     PBIP_FOLDER = pbi_variables["power_bi_variables"]["reports_folder"]
-    PBIP_REPORT_FOLDER = Path("Powering Information Data Insights/Powering Information Data Insights.Report")    
-    REPORT_FOLDER = PBIP_FOLDER / PBIP_REPORT_FOLDER / "definition" / "pages"
-    
     REPORT_NAME = pbi_variables["power_bi_variables"]["report_name"]
+    
+    PBIP_REPORT_FOLDER = Path(f"{REPORT_NAME}/{REPORT_NAME}.Report")    
+    PAGE_FOLDER = PBIP_FOLDER / PBIP_REPORT_FOLDER / "definition" / "pages"
+    
 
     OUTPUT_FOLDER = Path(pbi_variables["power_bi_variables"]["output_file"])
     FINAL_OUTPUT_FOLDER = OUTPUT_FOLDER / REPORT_NAME / "visuals"
@@ -509,4 +514,4 @@ if __name__ == "__main__":
     print(f"Loaded {len(model_inventory)} column/measure definitions\n")
 
 
-    extract_all_visuals(FINAL_OUTPUT_FOLDER, REPORT_FOLDER)
+    extract_all_visuals(FINAL_OUTPUT_FOLDER, PAGE_FOLDER)
