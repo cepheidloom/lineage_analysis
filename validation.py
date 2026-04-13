@@ -18,6 +18,8 @@ def create_sets_from_jsons() -> list[str] :
                 print("Failed to load file: ",f)
                 print("\nError: ", e)
                 raise
+            if json_file.get("type") == "VIEW":
+                continue
             json_file["file_name"] = file.replace(".json", "").split("--")[1] + "." + file.replace(".json", "").split("--")[2]
 
             try:
