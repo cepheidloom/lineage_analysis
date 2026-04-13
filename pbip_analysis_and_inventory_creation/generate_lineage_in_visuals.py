@@ -206,7 +206,7 @@ if __name__ == "__main__":
             print(f"Error processing {visual_file.name}: {e}")
     
     print(f"\n{'='*70}")
-    print(f"✓ Complete!")
+    print(f"Complete!")
     print(f"  Visuals processed: {processed_count}")
     print(f"  Output location: {OUTPUT_FOLDER.absolute()}")
     print(f"{'='*70}\n")

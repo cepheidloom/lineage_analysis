@@ -130,9 +130,9 @@ def validate_lineage(inventory_file):
     print("-" * 50)
     
     if not broken_links:
-        print("✅ PERFECT SCORE: Every single dependency points to a real, existing object in your JSON.")
+        print("PERFECT SCORE: Every single dependency points to a real, existing object in your JSON.")
     else:
-        print(f"❌ WARNING: Found {len(broken_links)} broken, external, or unresolved links.\n")
+        print(f"WARNING: Found {len(broken_links)} broken, external, or unresolved links.\n")
         
         # Print the first 20 broken links so you don't flood your console
         for issue in broken_links[:20]:

@@ -437,7 +437,7 @@ def extract_all_visuals(FINAL_OUTPUT_FOLDER, PAGE_FOLDER):
         page_name = page_data.get("name", "Unknown")
         page_display_name = page_data.get("displayName", page_name)
         
-        print(f"�� Processing Page: {page_display_name}")
+        print(f">> Processing Page: {page_display_name}")
         
         # Extract page-level filters
         page_filters = []
@@ -474,7 +474,7 @@ def extract_all_visuals(FINAL_OUTPUT_FOLDER, PAGE_FOLDER):
             json.dump(visual, f, indent=4, ensure_ascii=False)
     
     print(f"\n{'='*70}")
-    print(f"✓ Extraction Complete!")
+    print(f"Extraction Complete!")
     print(f"  Pages processed: {page_count}")
     print(f"  Visuals extracted: {visual_count}")
     print(f"  JSON files saved to: {FINAL_OUTPUT_FOLDER.absolute()}")
