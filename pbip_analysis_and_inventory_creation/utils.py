@@ -3,6 +3,8 @@ import yaml
 from pathlib import Path
 import os
 import re
+import pandas as pd
+
 
 def get_specific_page_tables():
     with open("_DATA_AND_OUTPUTS/local_files/target_object.yaml", "r") as f:
@@ -60,8 +62,54 @@ def get_primary_and_secondary_tables():
     for table in sorted(derived_tables):
         print(f"  - {table}")
 
+
+def extract_pages(pages_folder_path, output_excel_path="pages_list.xlsx"):
+    pages_path = Path(pages_folder_path)
+
+    if not pages_path.exists():
+        print(f"Path not found: {pages_path}")
+        return
+
+    pages = []
+    for folder in pages_path.iterdir():
+        if folder.is_dir():
+            page_id = folder.name
+            page_name = page_id  # fallback
+
+            # Try reading display name from page.json
+            page_json = folder / "page.json"
+            if page_json.exists():
+                with open(page_json, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    page_name = data.get("displayName", data.get("name", page_id))
+            else:
+                for file in folder.iterdir():
+                    if file.suffix == ".json":
+                        with open(file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            page_name = data.get("displayName", data.get("name", page_id))
+                        break
+
+            pages.append({"Page ID": page_id, "Page Name": page_name})
+
+    df = pd.DataFrame(pages)
+    df = df.sort_values("Page Name").reset_index(drop=True)
+    df.index += 1
+    df.index.name = "#"
+
+    df.to_excel(output_excel_path, sheet_name="Pages", engine="openpyxl")
+    print(f"Total Pages: {len(df)}")
+    print(f"Excel written to: {output_excel_path}")
+
+    return df
+
+
 if __name__ == "__main__":
-     get_primary_and_secondary_tables()
+    #  get_primary_and_secondary_tables()
+    pages_folder = "_DATA_AND_OUTPUTS/local_files/power_bi_inventory/power_bi_pbip_files/Enterprise Dashboards/Enterprise Dashboards.Report/definition/pages"
+    extract_pages(pages_folder,"pages_list.xlsx")
+
+
 
 
 
