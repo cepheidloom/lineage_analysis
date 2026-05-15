@@ -34,11 +34,22 @@ def extract_partitions(tables_folder):
             m_query = source_match.group(1).strip().strip('`') if source_match else ""
             m_query = re.split(r'\n\s*(annotation|changedProperty)\s+', m_query)[0].strip()
 
+            # Extract entity name
+            entity_name = ""
+            expression_source = ""
+            if partition_type == "entity":
+                en_match = re.search(r'^\s*entityName:\s*(.+)', partition, flags=re.MULTILINE)
+                es_match = re.search(r'^\s*expressionSource:\s*(.+)', partition, flags=re.MULTILINE)
+                entity_name = en_match.group(1).strip() if en_match else ""
+                expression_source = es_match.group(1).strip().strip("'") if es_match else ""
+
             all_partitions[tmdl_name] = {
                 "partition_name": partition_name,
                 "partition_type": partition_type,
                 "mode": mode,
-                "m_query": m_query
+                "m_query": m_query,
+                "entity_name": entity_name,           # populated for entity type
+                "expression_source": expression_source  # the AS connection reference
             }
 
     return all_partitions

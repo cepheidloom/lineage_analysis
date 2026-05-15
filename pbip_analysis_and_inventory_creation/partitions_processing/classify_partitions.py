@@ -9,6 +9,21 @@ def classify_single_partition(tmdl_name, data):
     m_query = data.get("m_query", "")
     partition_name = data.get("partition_name", "")
 
+    # Handle entity partitions (DirectQuery to Analysis Services / composite models)
+    if data.get("partition_type") == "entity":
+        return {
+            "PBI Table Name": tmdl_name,
+            "Partition Name": partition_name,
+            "Source Type": "DirectQuery (Analysis Services / Entity)",
+            "Server / URL": data.get("expression_source", ""),
+            "Database": "",
+            "Schema": "",
+            "Source Table Name": data.get("entity_name", ""),
+            "Dataflow Entity": "",
+            "Workspace ID": "",
+            "Dataflow ID": "",
+        }
+    
     sql_db_match = re.search(
         r'Sql\.Database\(\s*(?:#"([^"]+)"|"([^"]+)"|(\w+))\s*,\s*(?:#"([^"]+)"|"([^"]+)"|(\w+))\s*\)',
         m_query
