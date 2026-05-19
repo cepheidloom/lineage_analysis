@@ -13,7 +13,7 @@ from  processing_lineage_from_jsons.process_lineage_json import build_lineage_gr
 
 FOLDER_WITH_JSONS = "_DATA_AND_OUTPUTS/lineage_outputs"
 OUTPUT_JSON_FILE  = "_DATA_AND_OUTPUTS/local_files/lineage_statistics.json"
-DIRECTION         = "both"          # 'upstream', 'downstream', or 'both'
+DIRECTION         = "upstream"          # 'upstream', 'downstream', or 'both'
 
 with open("_DATA_AND_OUTPUTS/local_files/target_object.yaml", "r") as f:
     yaml_read = yaml.safe_load(f)
