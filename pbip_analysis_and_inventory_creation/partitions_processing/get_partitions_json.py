@@ -55,6 +55,40 @@ def extract_partitions(tables_folder):
     return all_partitions
 
 
+
+def extract_dependencies_from_m_query(m_query, all_table_names):
+    """
+    Extract dependency table names from the provided m_query string.
+    This uses a simple regex to find plausible references to other tables in the query.
+    """
+    dependencies = set()
+    # Check for table reference patterns
+    # Typical PBI table use: TableName[Column] or TableName, 'Table Name', etc.
+    # This can be improved, but as a starting point:
+    # look for usages like: TableName[xxx], 'Table Name'[xxx], #"Table Name"
+    pattern = re.compile(r"""(\b[\w\d_]+)\s*\[ # TableName[Column]
+                             |  ['"]([^'"]+)['"]\s*\[  # 'Table Name'[Column]
+                             |  #"(.*?)"  # #"Table Name"
+                          """, re.VERBOSE)
+    
+    for match in pattern.finditer(m_query):
+        for i in range(1, 4):
+            table_candidate = match.group(i)
+            if not table_candidate:
+                continue
+            # Normalize table candidate: remove leading/trailing strange chars, keep as in all_table_names
+            candidate = table_candidate.strip(" '#\"[]")
+            if candidate in all_table_names:
+                dependencies.add(candidate)
+    
+    # Also catch "let X = Y" alias assignments referencing other table names
+    # e.g., acps_Sheet = Source{[Item="acps",Kind="Sheet"]}[Data]
+    let_table_pattern = re.compile(r"(?:let|=)\s*([A-Za-z_][\w\d_]*)\s*=")
+    # Skipped in this demo, but you can expand if your data model commonly uses such assignments
+    
+    return sorted(list(dependencies))
+
+
 def main():
     with open("_DATA_AND_OUTPUTS/local_files/target_object.yaml", "r") as f:
         pbi_variables = yaml.safe_load(f)["power_bi_variables"]
@@ -65,6 +99,13 @@ def main():
     #### Variables END
 
     partitions = extract_partitions(tables_folder)
+
+    # Get set of all table names (keys in all_partitions)
+    all_table_names = set(partitions.keys())
+    for tablename, tableinfo in partitions.items():
+        m_query = tableinfo.get("m_query", "")
+        dependencies = extract_dependencies_from_m_query(m_query, all_table_names)
+        tableinfo["dependency"] = dependencies
 
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(partitions, f, indent=4, ensure_ascii=False)

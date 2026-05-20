@@ -33,50 +33,84 @@ def get_specific_page_tables():
     print("\n".join(set_all_tables))
         
 
-def get_primary_and_secondary_tables():
+def get_primary_and_secondary_tables(return_data=False):
+    """
+    Classify all TMDL tables by partition type.
+    Returns a dict if return_data=True, else just prints.
+
+    Categories:
+      - primary       : source-backed (partition type = m)
+      - derived       : DAX calculated tables (partition type = calculated)
+      - entity        : DirectQuery / composite model entities (partition type = entity)
+      - calc_group    : Calculation groups
+      - unknown       : Anything that did not match a known pattern
+    """
     with open("_DATA_AND_OUTPUTS/local_files/target_object.yaml", "r") as f:
         pbi_variables = yaml.safe_load(f)
 
-    reports_folder     = Path(pbi_variables["power_bi_variables"]["reports_folder"])
+    reports_folder    = Path(pbi_variables["power_bi_variables"]["reports_folder"])
     table_folder_path = Path(pbi_variables["power_bi_variables"]["table_folder_path"])
-        
+
     TABLES_FOLDER = reports_folder / table_folder_path
-    primary_tables = []
-    derived_tables = []
+
+
+    # Regex: matches "source = <type>" or "source: <type>" inside a partition block.
+    # Use word boundary so "m" doesn't match "mode".
+    PARTITION_RE = re.compile(
+        r'^\s*partition\s+[^\r\n=]+?=\s*(m|calculated|entity|calculationGroup)\b',
+        re.MULTILINE | re.IGNORECASE
+    )
+
+    primary_tables   = []   # m
+    derived_tables   = []   # calculated
+    entity_tables    = []   # entity (DirectQuery / composite)
+    calc_group_tables = []  # calculationGroup
+    unknown_tables   = []
 
     for tmdl_file in TABLES_FOLDER.glob("*.tmdl"):
-        with open(tmdl_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # Check partition type
-        if "= m" in content:
+        content = tmdl_file.read_text(encoding='utf-8')
+
+        # Collect ALL partition types found in this file (a table can technically have multiple partitions)
+        types_found = {m.group(1).lower() for m in PARTITION_RE.finditer(content)}
+
+        if not types_found:
+            unknown_tables.append(tmdl_file.stem)
+        elif "m" in types_found:
             primary_tables.append(tmdl_file.stem)
-        elif "= calculated" in content:
+        elif "calculated" in types_found:
             derived_tables.append(tmdl_file.stem)
+        elif "entity" in types_found:
+            entity_tables.append(tmdl_file.stem)
+        elif "calculationgroup" in types_found:
+            calc_group_tables.append(tmdl_file.stem)
+        else:
+            unknown_tables.append(tmdl_file.stem)
 
-    print(f"\n�� PRIMARY TABLES ({len(primary_tables)}):")
-    for table in sorted(primary_tables):
-        print(f"  - {table}")
+    return pd.DataFrame(
+    [(t, "Primary (M)") for t in primary_tables] +
+    [(t, "Derived (Calculated)") for t in derived_tables] +
+    [(t, "Entity (DirectQuery)") for t in entity_tables] +
+    [(t, "Calculation Group") for t in calc_group_tables] +
+    [(t, "Unknown") for t in unknown_tables],
+    columns=["Table", "Partition Type"]
+)
 
-    print(f"\n�� DERIVED TABLES ({len(derived_tables)}):")
-    for table in sorted(derived_tables):
-        print(f"  - {table}")
 
-
-def extract_pages(pages_folder_path, output_excel_path="pages_list.xlsx"):
+def extract_pages(pages_folder_path, output_excel_path=None):
     pages_path = Path(pages_folder_path)
 
     if not pages_path.exists():
         print(f"Path not found: {pages_path}")
-        return
+        return pd.DataFrame()
 
+    print("Looking under:", pages_path.resolve())
+    print("Subfolders found:", [p.name for p in pages_path.iterdir() if p.is_dir()])
     pages = []
     for folder in pages_path.iterdir():
         if folder.is_dir():
             page_id = folder.name
-            page_name = page_id  # fallback
+            page_name = page_id
 
-            # Try reading display name from page.json
             page_json = folder / "page.json"
             if page_json.exists():
                 with open(page_json, "r", encoding="utf-8") as f:
@@ -97,19 +131,22 @@ def extract_pages(pages_folder_path, output_excel_path="pages_list.xlsx"):
     df.index += 1
     df.index.name = "#"
 
-    df.to_excel(output_excel_path, sheet_name="Pages", engine="openpyxl")
-    print(f"Total Pages: {len(df)}")
-    print(f"Excel written to: {output_excel_path}")
+    if output_excel_path:
+        df.to_excel(output_excel_path, sheet_name="Pages", engine="openpyxl")
+        print(f"Excel written to: {output_excel_path}")
 
+    print(f"Total Pages: {len(df)}")
     return df
 
 
 if __name__ == "__main__":
-    #  get_primary_and_secondary_tables()
-    pages_folder = "_DATA_AND_OUTPUTS/local_files/power_bi_inventory/power_bi_pbip_files/Enterprise Dashboards/Enterprise Dashboards.Report/definition/pages"
-    extract_pages(pages_folder,"pages_list.xlsx")
+    with open("_DATA_AND_OUTPUTS/local_files/target_object.yaml", "r") as f:
+        pbi_variables = yaml.safe_load(f)["power_bi_variables"]
+    report_name = pbi_variables["report_name"]
+    pages_folder = Path(pbi_variables["reports_folder"]) / report_name / f"{report_name}.Report" / "definition" / "pages"
 
-
+    
+    # extract_pages(pages_folder,"pages_list.xlsx")
 
 
 

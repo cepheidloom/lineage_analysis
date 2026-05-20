@@ -2,7 +2,9 @@ import json
 import yaml
 import pandas as pd
 from pathlib import Path
-
+import sys
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from utils import get_primary_and_secondary_tables, extract_pages
 
 def load_model_inventory(model_inventory_path):
     with open(model_inventory_path, "r", encoding="utf-8") as f:
@@ -104,9 +106,11 @@ def main():
 
     report_name = Path(pbi_variables["report_name"])
     output_file = Path(pbi_variables["output_file"])
+    
 
     #### Variables
     include_source_mapping = True
+    pages_folder = Path(pbi_variables["reports_folder"]) / report_name / f"{report_name}.Report" / "definition" / "pages"
     model_inventory_path = output_file / report_name / f"{report_name}_model_inventory.json"
     partitions_json_path = output_file / report_name / "all_partitions.json"
     VISUALS_LINEAGE_FOLDER = output_file / report_name / "visuals_lineage"
@@ -114,10 +118,12 @@ def main():
     #### Variables END
 
     model_inventory = load_model_inventory(model_inventory_path)
-
+    df_pages = extract_pages(pages_folder)
     source_lookup = None
+    partitions = None
     if include_source_mapping:
-        source_lookup = build_source_lookup(load_partitions(partitions_json_path))
+        partitions = load_partitions(partitions_json_path)
+        source_lookup = build_source_lookup(partitions)
 
     list_pages = [f.name for f in VISUALS_LINEAGE_FOLDER.iterdir() if f.is_dir()]
 
@@ -137,17 +143,35 @@ def main():
     df_visuals = pd.DataFrame(enrich_rows(all_visual_rows, model_inventory, source_lookup)).drop_duplicates()
     df_filters = pd.DataFrame(enrich_rows(all_filter_rows, model_inventory, source_lookup)).drop_duplicates()
 
-    with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
-        df_visuals.to_excel(writer, sheet_name="Combined Lineage", index=False)
+    # Build Table Sources sheet (same as classify_partitions.py output)
+    df_table_sources = None
+    if include_source_mapping and source_lookup is not None:
+        df_table_sources = pd.DataFrame(list(source_lookup.values()))
 
+    with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
+            # Pages Sheet(utils.py)
+        df_pages.reset_index().to_excel(writer, sheet_name="Pages", index=False)
+
+        # Tables Sheet: Primary vs Derived table classification 
+        get_primary_and_secondary_tables(return_data=True).to_excel(writer, sheet_name="Tables", index=False)
+            
+            # Table Sources (output of classify_partitions.py)
+        if df_table_sources is not None:
+            df_table_sources.to_excel(writer, sheet_name="Table Sources", index=False)
+
+            # KPIs Sheet
+        df_visuals.to_excel(writer, sheet_name="KPIs    ", index=False)
+
+            # Page Filters Sheet
         df_filters.to_excel(writer, sheet_name="Page Filters", index=False)
+
 
         tables_summary = df_visuals.groupby(["Table"] + (["Source Type", "Server / URL", "Database", "Schema", "Source Table Name"] if include_source_mapping else [])).agg(
             Fields_Count=("Field", "nunique"),
             Pages_Using=("Page Name", "nunique"),
             Visuals_Using=("Visual ID", "nunique")
         ).reset_index()
-        tables_summary.to_excel(writer, sheet_name="Tables Summary", index=False)
+        tables_summary.to_excel(writer, sheet_name="Tables Used Summary", index=False)
 
         if include_source_mapping:
             source_summary = df_visuals.groupby("Source Type").agg(
@@ -156,11 +180,13 @@ def main():
                 Visuals=("Visual ID", "nunique"),
                 Pages=("Page Name", "nunique")
             ).reset_index().sort_values("Tables", ascending=False)
-            source_summary.to_excel(writer, sheet_name="Source Type Summary", index=False)
+            source_summary.to_excel(writer, sheet_name="Source Type Used Summary", index=False)
 
     print(f"✅ Total visual rows: {len(df_visuals)}")
     print(f"🔎 Total page filter rows: {len(df_filters)}")
     print(f"📄 Total pages: {len(list_pages)}")
+    if df_table_sources is not None:
+        print(f"📋 Total table sources: {len(df_table_sources)}")
     print(f"💾 Excel written to: {output_excel}")
 
 
