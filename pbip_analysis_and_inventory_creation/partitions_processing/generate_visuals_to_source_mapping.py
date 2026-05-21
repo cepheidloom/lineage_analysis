@@ -124,6 +124,19 @@ def main():
     if include_source_mapping:
         partitions = load_partitions(partitions_json_path)
         source_lookup = build_source_lookup(partitions)
+        # Merge raw partition fields into source_lookup
+        for tmdl_name, raw in partitions.items():
+            if tmdl_name in source_lookup:
+                source_lookup[tmdl_name].update({
+                    "Table": tmdl_name,
+                    "Partition Name": raw.get("partition_name", ""),
+                    "Partition Type": raw.get("partition_type", ""),
+                    "Mode": raw.get("mode", ""),
+                    "M Query": raw.get("m_query", ""),
+                    "Entity Name": raw.get("entity_name", ""),
+                    "Expression Source": raw.get("expression_source", ""),
+                    "Dependencies": ", ".join(raw.get("dependency", [])),
+                })
 
     list_pages = [f.name for f in VISUALS_LINEAGE_FOLDER.iterdir() if f.is_dir()]
 
@@ -146,7 +159,11 @@ def main():
     # Build Table Sources sheet (same as classify_partitions.py output)
     df_table_sources = None
     if include_source_mapping and source_lookup is not None:
+        classified_cols = ["Table", "Source Type", "Server / URL", "Database", "Schema", "Source Table Name", "Dataflow Entity", "Workspace ID", "Dataflow ID"]
+        partition_cols = ["Partition Name", "Partition Type", "Mode", "M Query", "Entity Name", "Expression Source", "Dependencies"]
         df_table_sources = pd.DataFrame(list(source_lookup.values()))
+        ordered_cols = [c for c in classified_cols + partition_cols if c in df_table_sources.columns]
+        df_table_sources = df_table_sources[ordered_cols]
 
     with pd.ExcelWriter(output_excel, engine="openpyxl") as writer:
             # Pages Sheet(utils.py)

@@ -128,20 +128,20 @@ def main():
     # OPTIONAL EXCEL EXPORT
     # (Requires: pip install pandas openpyxl)
     # ==========================================
-    import pandas as pd
+    # import pandas as pd
     
-    excel_data = []
-    for table_name, info in partitions.items():
-        row = {"Table": table_name}
-        row.update(info)
-        # Convert the dependency list into a comma-separated string for Excel readability
-        row["dependency"] = ", ".join(row.get("dependency", []))
-        excel_data.append(row)
+    # excel_data = []
+    # for table_name, info in partitions.items():
+    #     row = {"Table": table_name}
+    #     row.update(info)
+    #     # Convert the dependency list into a comma-separated string for Excel readability
+    #     row["dependency"] = ", ".join(row.get("dependency", []))
+    #     excel_data.append(row)
     
-    excel_output_path = output_json.with_suffix('.xlsx')
-    df = pd.DataFrame(excel_data)
-    df.to_excel(excel_output_path, index=False)
-    print(f"Excel written to: {excel_output_path}")
+    # excel_output_path = output_json.with_suffix('.xlsx')
+    # df = pd.DataFrame(excel_data)
+    # df.to_excel(excel_output_path, index=False)
+    # print(f"Excel written to: {excel_output_path}")
     # ==========================================
 
 
