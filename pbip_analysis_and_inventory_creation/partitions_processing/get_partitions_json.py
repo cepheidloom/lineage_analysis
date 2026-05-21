@@ -56,36 +56,34 @@ def extract_partitions(tables_folder):
 
 
 
-def extract_dependencies_from_m_query(m_query, all_table_names):
+def extract_dependencies_from_m_query(current_table_name, m_query, all_known_tables):
     """
-    Extract dependency table names from the provided m_query string.
-    This uses a simple regex to find plausible references to other tables in the query.
+    Casts a 'Regex Net' over the M query to find potential dependencies,
+    then filters them against the actual known Universe of Tables.
     """
     dependencies = set()
-    # Check for table reference patterns
-    # Typical PBI table use: TableName[Column] or TableName, 'Table Name', etc.
-    # This can be improved, but as a starting point:
-    # look for usages like: TableName[xxx], 'Table Name'[xxx], #"Table Name"
-    pattern = re.compile(r"""(\b[\w\d_]+)\s*\[ # TableName[Column]
-                             |  ['"]([^'"]+)['"]\s*\[  # 'Table Name'[Column]
-                             |  #"(.*?)"  # #"Table Name"
-                          """, re.VERBOSE)
     
-    for match in pattern.finditer(m_query):
-        for i in range(1, 4):
-            table_candidate = match.group(i)
-            if not table_candidate:
-                continue
-            # Normalize table candidate: remove leading/trailing strange chars, keep as in all_table_names
-            candidate = table_candidate.strip(" '#\"[]")
-            if candidate in all_table_names:
-                dependencies.add(candidate)
+    if not m_query:
+        return []
+
+    # Regex 1: Catches M's quoted table references: #"Table Name with Spaces"
+    # The (?!\s*=) is a safety net: it ensures we don't accidentally grab a local M step declaration
+    quoted_pattern = re.compile(r'#"(.*?)"(?!\s*=)')
     
-    # Also catch "let X = Y" alias assignments referencing other table names
-    # e.g., acps_Sheet = Source{[Item="acps",Kind="Sheet"]}[Data]
-    let_table_pattern = re.compile(r"(?:let|=)\s*([A-Za-z_][\w\d_]*)\s*=")
-    # Skipped in this demo, but you can expand if your data model commonly uses such assignments
-    
+    # Regex 2: Catches standard unquoted table references: TableNameWithoutSpaces
+    # Also uses (?!\s*=) to avoid grabbing local step variables like AppendedData = ...
+    word_pattern = re.compile(r'\b([a-zA-Z_]\w*)\b(?!\s*=)')
+
+    # Cast the net for quoted tables
+    for match in quoted_pattern.findall(m_query):
+        if match in all_known_tables and match != current_table_name:
+            dependencies.add(match)
+
+    # Cast the net for unquoted standard words
+    for match in word_pattern.findall(m_query):
+        if match in all_known_tables and match != current_table_name:
+            dependencies.add(match)
+
     return sorted(list(dependencies))
 
 
@@ -100,18 +98,51 @@ def main():
 
     partitions = extract_partitions(tables_folder)
 
-    # Get set of all table names (keys in all_partitions)
-    all_table_names = set(partitions.keys())
+    # Step 1: Establish the Universe of Tables
+    all_known_tables = set(partitions.keys())
+    
+    print("Mapping M query dependencies...")
     for tablename, tableinfo in partitions.items():
-        m_query = tableinfo.get("m_query", "")
-        dependencies = extract_dependencies_from_m_query(m_query, all_table_names)
-        tableinfo["dependency"] = dependencies
+        partition_type = tableinfo.get("partition_type", "")
+        
+        # Step 2 & 3: Skip Entity and Calculated partitions. Only parse 'm' queries.
+        if partition_type == "m":
+            m_query = tableinfo.get("m_query", "")
+            # Step 4 & 5: Extract, validate, deduplicate, and append
+            dependencies = extract_dependencies_from_m_query(tablename, m_query, all_known_tables)
+            tableinfo["dependency"] = dependencies
+        else:
+            # If it's entity or calculated, just give it an empty dependency list
+            tableinfo["dependency"] = []
+
+    # Write to JSON
 
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(partitions, f, indent=4, ensure_ascii=False)
 
     print(f"Total partitions extracted: {len(partitions)}")
     print(f"JSON written to: {output_json}")
+
+
+    # ==========================================
+    # OPTIONAL EXCEL EXPORT
+    # (Requires: pip install pandas openpyxl)
+    # ==========================================
+    import pandas as pd
+    
+    excel_data = []
+    for table_name, info in partitions.items():
+        row = {"Table": table_name}
+        row.update(info)
+        # Convert the dependency list into a comma-separated string for Excel readability
+        row["dependency"] = ", ".join(row.get("dependency", []))
+        excel_data.append(row)
+    
+    excel_output_path = output_json.with_suffix('.xlsx')
+    df = pd.DataFrame(excel_data)
+    df.to_excel(excel_output_path, index=False)
+    print(f"Excel written to: {excel_output_path}")
+    # ==========================================
 
 
 if __name__ == "__main__":
