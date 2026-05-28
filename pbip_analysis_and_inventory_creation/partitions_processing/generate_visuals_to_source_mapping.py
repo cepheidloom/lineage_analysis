@@ -129,6 +129,7 @@ def main():
             if tmdl_name in source_lookup:
                 source_lookup[tmdl_name].update({
                     "Table": tmdl_name,
+                    "Source Layer": raw.get("source_layer", ""),
                     "Partition Name": raw.get("partition_name", ""),
                     "Partition Type": raw.get("partition_type", ""),
                     "Mode": raw.get("mode", ""),
@@ -160,7 +161,7 @@ def main():
     df_table_sources = None
     if include_source_mapping and source_lookup is not None:
         classified_cols = ["Table", "Source Type", "Server / URL", "Database", "Schema", "Source Table Name", "Dataflow Entity", "Workspace ID", "Dataflow ID"]
-        partition_cols = ["Partition Name", "Partition Type", "Mode", "M Query", "Entity Name", "Expression Source", "Dependencies"]
+        partition_cols = ["Source Layer", "Partition Name", "Partition Type", "Mode", "M Query", "Entity Name", "Expression Source", "Dependencies"]
         df_table_sources = pd.DataFrame(list(source_lookup.values()))
         ordered_cols = [c for c in classified_cols + partition_cols if c in df_table_sources.columns]
         df_table_sources = df_table_sources[ordered_cols]
@@ -170,7 +171,19 @@ def main():
         df_pages.reset_index().to_excel(writer, sheet_name="Pages", index=False)
 
         # Tables Sheet: Primary vs Derived table classification 
-        get_primary_and_secondary_tables(return_data=True).to_excel(writer, sheet_name="Tables", index=False)
+        df_tables = get_primary_and_secondary_tables(return_data=True)
+        if partitions:
+            # Append expression_query entries missing from .tmdl scan
+            expr_rows = pd.DataFrame([
+                {"Table": k, "Partition Type": "Expression Query"}
+                for k, v in partitions.items()
+                if v.get("source_layer") == "expression_query"
+            ])
+            df_tables = pd.concat([df_tables, expr_rows], ignore_index=True)
+            # Add source_layer to all rows
+            sl_map = {k: v.get("source_layer", "") for k, v in partitions.items()}
+            df_tables["source_layer"] = df_tables["Table"].map(sl_map)
+        df_tables.reset_index(drop=True).to_excel(writer, sheet_name="Tables", index=False)
             
             # Table Sources (output of classify_partitions.py)
         if df_table_sources is not None:
